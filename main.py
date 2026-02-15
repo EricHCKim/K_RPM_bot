@@ -1,84 +1,54 @@
 import os
-import requests
 from playwright.sync_api import sync_playwright
 
-# ------------------------------------------------------
-# [설정] 텔레그램 정보
-# ------------------------------------------------------
-TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
-CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 URL = "https://www.iris.go.kr/contents/retrieveBsnsAncmBtinSituListView.do"
-FILE_NAME = "latest.txt"
 
-def send_telegram(message):
-    if not TELEGRAM_TOKEN or not CHAT_ID: return
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    try:
-        requests.post(url, json={'chat_id': CHAT_ID, 'text': message})
-    except: pass
-
-def check_iris_playwright():
-    print("🚀 [최신형 로봇] Playwright 가동 시작...")
+def debug_cctv():
+    print("🎥 [CCTV 모드] 로봇이 보는 화면을 그대로 출력합니다...")
 
     with sync_playwright() as p:
-        # 1. 브라우저 실행 (크롬보다 훨씬 가볍고 빠름)
+        # 브라우저 띄우기 (사람인 척 위장)
         browser = p.chromium.launch(headless=True)
-        
-        # 2. 사람처럼 보이기 위한 설정 (User-Agent)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             viewport={"width": 1920, "height": 1080}
         )
         page = context.new_page()
 
         try:
-            # 3. 사이트 접속
-            print(f"⏳ 사이트 접속 중: {URL}")
-            page.goto(URL, timeout=60000) # 60초 대기
-
-            # 4. 테이블이 뜰 때까지 기다림 (가장 확실한 방법)
-            print("⏳ 데이터 로딩 대기 중...")
-            page.wait_for_selector("table tbody tr", timeout=30000)
-
-            # 5. 제목 추출
-            # 첫 번째 줄(tr) 안의 제목(.tit 또는 a태그) 가져오기
-            title_element = page.query_selector("table tbody tr .tit")
-            if not title_element:
-                title_element = page.query_selector("table tbody tr a")
+            print(f"🌐 접속 시도: {URL}")
+            page.goto(URL, timeout=60000)
             
-            if title_element:
-                current_title = title_element.inner_text().strip()
+            # 로딩 기다리기 (그냥 무식하게 10초 대기)
+            print("⏳ 화면이 뜰 때까지 10초간 대기합니다...")
+            page.wait_for_timeout(10000)
+
+            # 📸 [핵심] 현재 화면 정보 출력
+            print("\n" + "="*30)
+            print(f"📌 페이지 제목: {page.title()}")
+            print("="*30)
+            
+            # 본문 텍스트 긁어오기 (상위 500자)
+            visible_text = page.inner_text("body")
+            print("📜 [화면에 보이는 글자들 (앞부분)]")
+            print(visible_text[:500]) 
+            print("="*30 + "\n")
+
+            # 테이블이 진짜 없는지 확인
+            table_count = page.locator("table").count()
+            print(f"📊 발견된 테이블 개수: {table_count}개")
+            
+            if table_count == 0:
+                print("❌ 테이블이 없습니다. 차단되었거나 로딩 중입니다.")
             else:
-                # 제목을 못 찾으면 첫 줄 전체 텍스트라도 가져옴
-                current_title = page.query_selector("table tbody tr").inner_text().strip()
-
-            print(f"📌 추출된 제목: {current_title}")
-
-            # 6. 저장 및 알림 로직
-            try:
-                with open(FILE_NAME, 'r', encoding='utf-8') as f:
-                    last_title = f.read().strip()
-            except FileNotFoundError:
-                last_title = "NONE"
-
-            if current_title != last_title:
-                print("🔔 새 공고 발견!")
-                msg = f"[IRIS 새 공고]\n{current_title}\n\n{URL}"
-                send_telegram(msg)
-                with open(FILE_NAME, 'w', encoding='utf-8') as f:
-                    f.write(current_title)
-            else:
-                print("✅ 새 공고 없음.")
-                # 성공 확인용 (첫 성공 후 주석 처리)
-                # send_telegram(f"[생존신고] 이상 무. 최신: {current_title}")
+                print("✅ 테이블이 있습니다! (그런데 왜 아까는 못 찾았지?)")
 
         except Exception as e:
             print(f"⚠️ 에러 발생: {e}")
-            send_telegram(f"❌ [오류 발생]\n{str(e)[:200]}")
-
+        
         finally:
             browser.close()
-            print("👋 브라우저 종료")
+            print("👋 진단 종료")
 
 if __name__ == "__main__":
-    check_iris_playwright()
+    debug_cctv()

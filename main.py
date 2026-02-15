@@ -76,15 +76,16 @@ def check_iris_with_browser():
         else:
             print("✅ 새로운 공고가 없습니다.")
             # 테스트용: 매번 알림 받고 싶으면 아래 주석 해제
-            # send_telegram(f"[생존신고] 이상 무. 최신글: {current_title}")
+            send_telegram(f"[생존신고] 이상 무. 최신글: {current_title}")
 
     except Exception as e:
         print(f"⚠️ 에러 발생: {e}")
         # 에러 내용을 나에게 보내고 싶으면 주석 해제
-        # send_telegram(f"[오류 발생] {e}")
+        send_telegram(f"[오류 발생] {e}")
 
     finally:
         driver.quit() # 브라우저 종료
 
 if __name__ == "__main__":
     check_iris_with_browser()
+

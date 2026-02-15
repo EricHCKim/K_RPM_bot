@@ -1,12 +1,12 @@
-name: IRIS 알리미
+name: IRIS 듀얼 알리미
 
 on:
   schedule:
-    - cron: '0 * * * *'  # 매 시간 정각 실행
-  workflow_dispatch:      # 수동 실행 버튼
+    - cron: '0 * * * *'  # 매 시간 정각
+  workflow_dispatch:      # 수동 실행
 
 jobs:
-  check_notice:
+  run-crawlers:
     runs-on: ubuntu-latest
     
     steps:
@@ -18,19 +18,26 @@ jobs:
         with:
           python-version: '3.9'
           
-      - name: 필수 설치 (라이브러리 및 브라우저)
-        # 여기가 수정된 핵심 부분입니다. (&&로 연결하여 오타 방지)
+      - name: 필수 설치
         run: pip install requests playwright && playwright install chromium
         
-      - name: 크롤러 실행
+      - name: 1. 전체 공고 크롤러 실행
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python main.py
+        run: python main_all.py  # 첫 번째 파일 실행
+        continue-on-error: true   # 에러나도 다음 거 실행
         
-      - name: 결과 저장
+      - name: 2. 바이오 공고 크롤러 실행
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main_bio.py  # 두 번째 파일 실행
+        continue-on-error: true
+        
+      - name: 결과 저장 (파일 2개 모두)
         run: |
           git config --global user.name 'GitHub Action Bot'
           git config --global user.email 'action@github.com'
-          git add latest.txt || true
-          git diff --quiet && git diff --staged --quiet || (git commit -m "새 공고 업데이트" && git push)
+          git add latest_all.txt latest_bio.txt || true
+          git diff --quiet && git diff --staged --quiet || (git commit -m "공고 현황 업데이트" && git push)

@@ -76,6 +76,8 @@ def check_iris():
                     f.write(current_title)
             else:
                 print("✅ 새로운 공고가 없습니다.")
+                # ▼ 이 줄을 추가하면 매번 알림이 옵니다!
+                send_telegram(f"[생존신고] 새로운 공고 없음.\n현재 최신글: {current_title}")
         else:
             print("❌ 제목 요소를 찾을 수 없습니다.")
 
@@ -89,4 +91,5 @@ if __name__ == "__main__":
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     
+
     check_iris()

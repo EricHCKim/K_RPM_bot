@@ -43,7 +43,6 @@ def check_bio():
             
             for link in links:
                 text = link.inner_text().strip()
-                # 고정 공지 등 쓸데없는 것 제외
                 if len(text) > 10 and not any(x in text for x in ["NTIS", "API", "매뉴얼", "고객센터"]):
                     current_titles.append(text)
 
@@ -56,32 +55,33 @@ def check_bio():
             except FileNotFoundError:
                 last_saved_title = "NONE"
 
-            # 5. [핵심] 저장된 글 위쪽에 있는 '새 글'만 골라내기
+            # 5. 새 글 골라내기
             new_announcements = []
             for title in current_titles:
                 if title == last_saved_title:
-                    break # 아는 글 나오면 스톱
+                    break
                 new_announcements.append(title)
 
-            # 6. 알림 보내기 (1개라도 있으면 보냄!)
+            # 6. 알림 보내기 (조건 분기)
             if new_announcements:
                 count = len(new_announcements)
                 print(f"🔔 바이오 새 공고 {count}개 발견!")
-                
-                # 제목 리스트 만들기
                 list_text = "\n".join([f"🔹 {t}" for t in new_announcements])
                 
                 msg = f"🔥🔥 [바이오/의료 새 공고 {count}건] 🔥🔥\n\n{list_text}\n\n🔗 접속하기:\n{URL}"
                 send_telegram(msg)
                 
-                # 맨 위(최신) 글을 저장해둠
                 with open(FILE_NAME, 'w', encoding='utf-8') as f:
                     f.write(new_announcements[0])
             else:
                 print("✅ 바이오 공고: 변동 없음")
+                # ▼ 여기가 추가된 부분입니다!
+                latest_one = current_titles[0] if current_titles else "없음"
+                send_telegram(f"✅ [바이오/의료] 현재 변동 사항 없습니다.\n(최신글: {latest_one})")
 
         except Exception as e:
             print(f"⚠️ 에러: {e}")
+            send_telegram(f"⚠️ [바이오/의료] 오류 발생: {e}")
         finally:
             browser.close()
 

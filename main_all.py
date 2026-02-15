@@ -63,9 +63,13 @@ def check_all():
                     f.write(new_announcements[0])
             else:
                 print("✅ 전체 공고: 변동 없음")
+                # ▼ 여기가 추가된 부분입니다!
+                latest_one = current_titles[0] if current_titles else "없음"
+                send_telegram(f"✅ [전체 공고] 현재 변동 사항 없습니다.\n(최신글: {latest_one})")
 
         except Exception as e:
             print(f"⚠️ 에러: {e}")
+            send_telegram(f"⚠️ [전체 공고] 오류 발생: {e}")
         finally:
             browser.close()
 

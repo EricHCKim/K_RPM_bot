@@ -1,4 +1,3 @@
-# main_bio.py (바이오/의료 전용)
 import os
 import requests
 from playwright.sync_api import sync_playwright
@@ -6,7 +5,7 @@ from playwright.sync_api import sync_playwright
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 URL = "https://www.iris.go.kr/contents/retrieveBsnsAncmBtinSituListView.do"
-FILE_NAME = "latest_bio.txt"  # 저장 파일 이름 변경!
+FILE_NAME = "latest_bio.txt"
 
 def send_telegram(message):
     if not TELEGRAM_TOKEN or not CHAT_ID: return
@@ -16,7 +15,7 @@ def send_telegram(message):
     except: pass
 
 def check_bio():
-    print("🚀 [바이오/의료] 맞춤 확인 시작")
+    print("🚀 [바이오/의료] 새 공고 확인 중...")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
@@ -24,16 +23,13 @@ def check_bio():
             page.goto(URL, timeout=60000)
             page.wait_for_timeout(3000)
 
-            # 필터 클릭
+            # 1. 필터 클릭
             try:
                 page.locator("label").filter(has_text="생명과학").click()
                 page.locator("label").filter(has_text="보건의료").click()
-                print("✅ 필터 적용 완료")
             except: pass
-
-            page.wait_for_timeout(1000)
-
-            # 검색 클릭
+            
+            # 2. 검색 클릭
             try:
                 page.get_by_role("button", name="검색").first.click()
             except:
@@ -41,32 +37,51 @@ def check_bio():
             
             page.wait_for_timeout(5000)
 
+            # 3. 현재 화면의 모든 공고 제목 수집
             links = page.query_selector_all("a")
-            latest_title = None
+            current_titles = []
+            
             for link in links:
                 text = link.inner_text().strip()
+                # 고정 공지 등 쓸데없는 것 제외
                 if len(text) > 10 and not any(x in text for x in ["NTIS", "API", "매뉴얼", "고객센터"]):
-                    latest_title = text
-                    break
-            
-            if latest_title:
-                try:
-                    with open(FILE_NAME, 'r', encoding='utf-8') as f:
-                        last_title = f.read().strip()
-                except FileNotFoundError:
-                    last_title = "NONE"
+                    current_titles.append(text)
 
-                if latest_title != last_title:
-                    print(f"🔔 바이오 공고 업데이트: {latest_title}")
-                    send_telegram(f"🔥🔥 [IRIS 핵심! 바이오/의료 공고] 🔥🔥\n{latest_title}\n\n{URL}")
-                    with open(FILE_NAME, 'w', encoding='utf-8') as f:
-                        f.write(latest_title)
-                else:
-                    print("✅ 바이오 공고: 변동 없음")
+            if not current_titles: return
+
+            # 4. 지난번 저장한 제목 불러오기
+            try:
+                with open(FILE_NAME, 'r', encoding='utf-8') as f:
+                    last_saved_title = f.read().strip()
+            except FileNotFoundError:
+                last_saved_title = "NONE"
+
+            # 5. [핵심] 저장된 글 위쪽에 있는 '새 글'만 골라내기
+            new_announcements = []
+            for title in current_titles:
+                if title == last_saved_title:
+                    break # 아는 글 나오면 스톱
+                new_announcements.append(title)
+
+            # 6. 알림 보내기 (1개라도 있으면 보냄!)
+            if new_announcements:
+                count = len(new_announcements)
+                print(f"🔔 바이오 새 공고 {count}개 발견!")
+                
+                # 제목 리스트 만들기
+                list_text = "\n".join([f"🔹 {t}" for t in new_announcements])
+                
+                msg = f"🔥🔥 [바이오/의료 새 공고 {count}건] 🔥🔥\n\n{list_text}\n\n🔗 접속하기:\n{URL}"
+                send_telegram(msg)
+                
+                # 맨 위(최신) 글을 저장해둠
+                with open(FILE_NAME, 'w', encoding='utf-8') as f:
+                    f.write(new_announcements[0])
+            else:
+                print("✅ 바이오 공고: 변동 없음")
 
         except Exception as e:
             print(f"⚠️ 에러: {e}")
-            # send_telegram(f"에러: {e}") # 필요하면 주석 해제
         finally:
             browser.close()
 

@@ -1,91 +1,96 @@
 import os
 import time
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import requests
+from webdriver_manager.chrome import ChromeDriverManager
 
 # ------------------------------------------------------
-# [설정] 텔레그램 정보 (GitHub Secret에서 가져옴)
+# [설정] 텔레그램 정보
 # ------------------------------------------------------
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
-
 URL = "https://www.iris.go.kr/contents/retrieveBsnsAncmBtinSituListView.do"
 FILE_NAME = "latest.txt"
 
 def send_telegram(message):
-    if not TELEGRAM_TOKEN or not CHAT_ID:
-        print("텔레그램 설정이 없습니다.")
-        return
+    if not TELEGRAM_TOKEN or not CHAT_ID: return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {'chat_id': CHAT_ID, 'text': message}
-    requests.post(url, json=payload)
-
-def check_iris_with_browser():
-    print("🚀 [고성능 로봇] 브라우저를 실행합니다...")
-
-    # 1. 브라우저 설정 (화면 없이 실행하는 '헤드리스' 모드)
-    chrome_options = Options()
-    chrome_options.add_argument('--headless')  # 화면 없이 실행
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
-
-    driver = webdriver.Chrome(options=chrome_options)
-
     try:
-        # 2. 사이트 접속
+        requests.post(url, json={'chat_id': CHAT_ID, 'text': message})
+    except Exception as e:
+        print(f"텔레그램 전송 실패: {e}")
+
+def check_iris_final():
+    print("🚀 [최종 로봇] 안전 모드로 브라우저 가동 시작...")
+
+    # 1. 크롬 옵션 설정 (충돌 방지용 옵션 대거 추가)
+    chrome_options = Options()
+    chrome_options.add_argument('--headless=new') # 최신 헤드리스 모드
+    chrome_options.add_argument('--no-sandbox') # 리눅스 환경 필수
+    chrome_options.add_argument('--disable-dev-shm-usage') # 메모리 부족 방지
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--window-size=1920,1080')
+    
+    # 봇 탐지 회피 (User-Agent 설정)
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36")
+
+    driver = None
+    try:
+        # 2. 드라이버 자동 설치 및 실행
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        print("✅ 브라우저 실행 성공! 사이트 접속 중...")
         driver.get(URL)
-        print("⏳ 사이트 로딩 대기 중...")
 
-        # 3. 데이터가 뜰 때까지 최대 20초 기다림 (테이블이 나타날 때까지)
-        wait = WebDriverWait(driver, 20)
+        # 3. 데이터 로딩 대기 (최대 30초)
+        wait = WebDriverWait(driver, 30)
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-
-        # 4. 첫 번째 공고 찾기
-        # IRIS 사이트 구조상 첫 번째 행(tr)의 제목을 가져옵니다.
-        # (JavaScript가 실행된 후의 진짜 HTML을 봅니다)
+        
+        # 4. 제목 추출
+        # IRIS 사이트 구조: table > tbody > tr > (class='tit' 또는 a태그)
         latest_row = driver.find_element(By.CSS_SELECTOR, "table tbody tr")
         
-        # 제목이 들어있는 요소 찾기 (상황에 따라 class가 다를 수 있어 여러 시도)
         try:
-            title_element = latest_row.find_element(By.CLASS_NAME, "tit") # 일반적인 경우
+            title_el = latest_row.find_element(By.CLASS_NAME, "tit")
         except:
-            title_element = latest_row.find_element(By.TAG_NAME, "a") # 링크 태그인 경우
-
-        current_title = title_element.text.strip()
+            title_el = latest_row.find_element(By.TAG_NAME, "a")
+            
+        current_title = title_el.text.strip()
         print(f"📌 현재 최신 공고: {current_title}")
 
-        # 5. 저장된 기록과 비교
+        # 5. 저장 및 알림 로직
         try:
             with open(FILE_NAME, 'r', encoding='utf-8') as f:
                 last_title = f.read().strip()
         except FileNotFoundError:
-            last_title = "처음 실행"
+            last_title = "NONE"
 
         if current_title != last_title:
-            print("🔔 새로운 공고 발견! 알림을 보냅니다.")
-            msg = f"[IRIS 새 공고 알림]\n\n📄 제목: {current_title}\n🔗 링크: {URL}"
+            print("🔔 새 공고 발견! 알림 전송.")
+            msg = f"[IRIS 새 공고]\n{current_title}\n\n{URL}"
             send_telegram(msg)
-            
-            # 파일 업데이트
             with open(FILE_NAME, 'w', encoding='utf-8') as f:
                 f.write(current_title)
         else:
-            print("✅ 새로운 공고가 없습니다.")
-            # 테스트용: 매번 알림 받고 싶으면 아래 주석 해제
-            send_telegram(f"[생존신고] 이상 무. 최신글: {current_title}")
+            print("✅ 새 공고 없음.")
+            # 성공 확인용 (첫 성공 후에는 주석 처리 추천)
+            send_telegram(f"[성공] 크롤링 완료. 최신글: {current_title}")
 
     except Exception as e:
         print(f"⚠️ 에러 발생: {e}")
-        # 에러 내용을 나에게 보내고 싶으면 주석 해제
-        send_telegram(f"[오류 발생] {e}")
+        error_msg = f"❌ [오류 발생]\n{str(e)[:200]}" # 내용이 길면 잘라서 보냄
+        send_telegram(error_msg)
 
     finally:
-        driver.quit() # 브라우저 종료
+        if driver:
+            driver.quit()
+            print("👋 브라우저 종료")
 
 if __name__ == "__main__":
-    check_iris_with_browser()
-
+    check_iris_final()
